@@ -3,6 +3,8 @@
 import StringIO
 import re
 
+from lxml import etree
+
 from urlparse import urlparse,urlunparse
 from urllib import urlencode
 
@@ -107,7 +109,20 @@ class Response(dict):
     def text(self, charset=None):
         if charset is None:
             charset = self['data_charset']
-        return unicode(self['raw_data'].decode(charset,"xmlcharrefreplace"))
+            try:
+                return unicode(self['raw_data'].decode(charset,"xmlcharrefreplace"))
+            except UnicodeDecodingError:
+                return self['raw_data']
+
+    def html(self, charset=None):
+        try:
+            return etree.HTML(self.text())
+        except UnicodeDecodingError:
+            return etree.HTML(self['raw_data'])
+
+
+    def xml(self, charset=None):
+            return etree.XML(self['raw_data'])
 
 def decode_headers(headers_text):
     headers = []

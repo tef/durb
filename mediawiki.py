@@ -1,4 +1,6 @@
 """mediawiki api wrapper for python """
+import lxml.etree as etree
+
 import fetch
 
 
@@ -12,13 +14,19 @@ class Session(object):
 
     def _fetch(self, **params):
          params['format'] = 'xml'
-         output = self.http.fetch(self.url, post=params)
-         return output.text()
+         return self.http.parse(self.url, post=params)['xml']
 
     def login(self, username, password):
-        return self._fetch(action="login", lgname=username, lgpassword=password)
+        r = self._fetch(action="login", lgname=username, lgpassword=password)
+        return bool(r.xpath('/api/login/@result[. = "Success"]')[0])
 
     def logout(self):
-        return self._fetch(action="logout")
+        self._fetch(action="logout")
 
+    def get_edit_token(self, page_title):
+        r = self._fetch(action="query", prop="info|revisions", intoken="edit", titles=page_title)
+        token = r.xpath('/api/query/pages/page[@title = "%s"]/@edittoken'%page_title)[0]
+        last_rev= r.xpath('/api/query/pages/page[@title = "%s"]/@lastrevid'%page_title)[0]
+
+        return (token, last_rev)
 

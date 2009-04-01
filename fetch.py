@@ -16,23 +16,48 @@ def fetch(resource, **options):
     s = Session()
     return s.fetch(resource, **options)
 
+def parse(resource, **options):
+    s = Session()
+    return s.parse(resource, **options)
+
+def parse_html(resource, **options):
+    s = Session()
+    return s.parse_html(resource, **options)
+
+
 class Session(object):
     """A session contains defaults for fetching resources, 
     as well as keeping the http referer"""
 
     def __init__(self, **options):
         self.curl = pycurl.Curl()
+        self.curl.setopt(pycurl.COOKIEFILE,"")
         self.options = options
 
+    def parse(self, resource, **options):
+        out = self.fetch(resource, **options)
+        out['xml'] = out.xml()
+        return Response(out)
+
+    def parse_html(self, resource, **options):
+        out = self.fetch(resource, **options)
+        out['html'] = out.html()
+        return Response(out)
+
     def fetch(self, resource, **options):
+        response = StringIO.StringIO()
+        out = self.fetch_callback(resource, response.write, **options)
+        out['raw_data'] = response.getvalue()
+        return Response(out)
+
+    def fetch_callback(self, resource, response,  **options):
         opts = self.options.copy()
         opts.update(options)
         opts = self.curl_setup(opts)
 
-        response = StringIO.StringIO()
         headers = StringIO.StringIO()
 
-        self.curl.setopt(pycurl.WRITEFUNCTION, response.write)
+        self.curl.setopt(pycurl.WRITEFUNCTION, response)
         self.curl.setopt(pycurl.HEADERFUNCTION, headers.write)
 
         opts = self.fetch_setup(resource, opts)
@@ -49,13 +74,12 @@ class Session(object):
 
         location = self.curl.getinfo(pycurl.EFFECTIVE_URL)
         
-        return Response({
+        return {
             'response_code' : response_code,
-            'raw_data': response.getvalue(),
             'data_charset': charset,
             'headers' : decode_headers(headers.getvalue()),
             'url': location,
-            })
+            }
 
     def fetch_setup(self, resource, options):
         curl = self.curl

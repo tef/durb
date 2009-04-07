@@ -14,25 +14,39 @@ parser.add_option("-T", "--title", dest="title", help="title of page")
 parser.add_option("-t", "--text", dest="text", help="text of page")
 parser.add_option("-f", "--file", dest="file", help="file with text")
 parser.add_option("-A", "--auth", dest="auth", metavar="FILE",help="file with auth")
-parser.add_option("-U", "--url", dest="url",help="mediawiki url")
+parser.add_option("-U", "--url", dest="url",help="mediawiki url of api.php")
+parser.add_option("-E", "--export_url", dest="export_url",metavar="URL",help="mediawiki url of index.php")
+parser.add_option("-O", "--output", dest="output",metavar="FILE",help="output file")
 
 default_auth = os.path.expanduser("~/.mediawiki")
-mw_url = "http://www.includipedia.com/mediawiki-1.14.0/api.php"
-
+mw_api_url = "http://www.includipedia.com/mediawiki-1.14.0/api.php"
+mw_ex_url = "http://www.includipedia.com/mediawiki-1.14.0/index.php"
 def main(argv):
-    if not argv[0].startswith("-"):
+    if len(argv) > 1 and not argv[0].startswith("-"):
         action = argv.pop(0).lower()
     else:
         action = None
 
     (options, args) = parser.parse_args(argv)
-    url = options.url or mw_url
+    api_url = options.url or mw_api_url
+    ex_url = options.export_url or mw_ex_url
     auth_file = options.auth or default_auth
-    un, pw = read_creds(auth_file, url)
+    un, pw = read_creds(auth_file, api_url)
 
+    stdout = open(options.output,"w") if options.output else sys.stdout
     try:
-        s = Session(url)
-        if action == "login":
+        s = Session(api_url)
+        ex = SpecialExporter(ex_url)
+        if action == "export":
+            titles = []
+            if options.title:
+                titles = [option.title]
+            titles.extend(args)
+            out = ex.export(titles)
+            stdout.write(etree.tostring(out, pretty_print=True))
+
+            
+        elif action == "login":
             un,pw = ask_creds()
             if s.login(un,pw):
                 write_creds(auth_file, un, pw, url)
@@ -54,10 +68,11 @@ def main(argv):
                 title = options.title or "Includipedia:TestPageOnly"
                 token = s.get_edit_token(title)
                 s.edit(token, title, text)
-
         s.logout()
     except BaseException, e:
         sys.stderr.write("error: %s\n" % e)
+        raise
+
 
 
 def read_creds(filename, url):
@@ -100,6 +115,26 @@ def ask_creds():
         user = raw_input()
         pw = getpass.getpass("password:")
         return user,pw
+
+
+class SpecialExporter(object):
+    """A class for exporting pages via specialexporter"""
+    def __init__(self, base_url):
+        self.http = fetch.Session()
+        self.url = base_url
+
+    def export(self,pages,asc=True,offset=None,limit=1):
+         
+         params = {'title': 'Special:Export'}
+         params['pages'] = "\n".join(pages)
+         if not asc:
+             params['dir'] = "desc"
+         if offset:
+             params['offset'] = offset
+         params['limit'] = limit
+         print self.url, params
+         out =  self.http.fetch(self.url, post=params)
+         return  out.xml()
 
 class Session(object):
     """A session object handles the api connection and provides

@@ -1,4 +1,5 @@
 import mediawiki
+
 import lxml.etree as etree
 
 def loadpw(filename):
